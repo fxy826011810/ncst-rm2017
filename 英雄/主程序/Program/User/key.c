@@ -1,0 +1,209 @@
+#include "key.h"
+#include "stm32f4xx.h"
+#include "control.h"
+#include "tim.h"
+/*
+sw1.2-爪子(开闭)
+sw3.4-前后(前后)
+sw5.6-提升（升降）
+*/
+Switch \
+sw1={GPIOsw1,GPIO_Pin_sw1,0,0,0},\
+sw2={GPIOsw2,GPIO_Pin_sw2,0,0,0},\
+sw3={GPIOsw3,GPIO_Pin_sw3,0,0,0},\
+sw4={GPIOsw4,GPIO_Pin_sw4,0,0,0},\
+sw5={GPIOsw5,GPIO_Pin_sw5,0,0,0},\
+sw6={GPIOsw6,GPIO_Pin_sw6,0,0,0};
+ 
+ static uint8_t Scan( Switch *sw)
+{
+	if(GPIO_ReadInputDataBit(sw->gpio,sw->pin)==0)
+		{
+			if(sw->time>4)
+				sw->status=1;
+			else	
+			{
+				sw->time+=1;
+				sw->status=0;
+			}
+		}
+	else
+		{
+			sw->time=0;
+			sw->status=0;
+		}
+		return	sw->status;
+}
+uint8_t SWNum=0;
+void Switch_Scan(void)
+{
+	SWNum|=Scan(&sw1);
+	SWNum|=Scan(&sw2)<<1;
+	SWNum|=Scan(&sw3)<<2;
+	SWNum|=Scan(&sw4)<<3;
+	SWNum|=Scan(&sw5)<<4;
+	SWNum|=Scan(&sw6)<<5;
+}
+
+void MechArm_Init(void)
+{
+	TIM4->CCR1=399;
+	TIM2->CCR4=399;
+	TIM2->CCR1=399;
+	en1_on;
+	cw1_on;	
+	en2_on;
+	cw2_on;	
+	en3_on;
+	cw3_on;
+}
+SW_Status_t SW1_Status=SW_ALL_OFF,SW2_Status=SW_ALL_OFF,SW3_Status=SW_ALL_OFF;
+void MechArm_Switch(SW_Status_t sw1_status,SW_Status_t sw2_status,SW_Status_t sw3_status)
+{
+	if(sw1_status==SW1_ON)
+	{
+		if(SWNum&0x01)//爪子张开限位
+		{
+			sw1.lock=1;
+			cw1_off;
+			TIM2->CCR1=399;
+		}
+		else
+		{
+			if(sw1.lock)
+			{
+				TIM2->CCR1=0;
+				cw1_off;	
+			}
+			else
+			{
+				TIM2->CCR1=399;
+				cw1_on;	
+			}
+		}
+	}
+	if(sw1_status==SW2_ON)
+	{
+			if((SWNum>>1)&0x01)//爪子关闭限位
+			{
+				sw2.lock=1;
+				cw1_on;
+				TIM2->CCR1=399;
+			}
+			else
+			{
+				en1_on;
+				if(sw2.lock)
+				{
+					TIM2->CCR1=0;
+					cw1_on;	
+				}
+				else
+				{
+					TIM2->CCR1=399;
+					cw1_off;
+				}
+			}
+	}
+		if(sw2_status==SW3_ON)
+	{
+		if((SWNum>>2)&0x01)//前后前限位
+		{
+			sw3.lock=1;
+			cw2_off;
+			TIM2->CCR4=399;
+		}
+		else
+		{
+			if(sw3.lock)
+			{
+			TIM2->CCR4=0;
+			cw2_off;
+			}
+			else 
+			{
+			cw2_on;
+			TIM2->CCR4=399;
+			}
+		}
+	}
+	if(sw2_status==SW4_ON)
+	{
+	 if((SWNum>>3)&0x01)//前后后限位
+		{
+			sw4.lock=1;
+			cw2_on;	
+			TIM2->CCR4=399;
+		}
+		else
+		{
+			if(sw4.lock)
+			{
+			cw2_on;	
+			TIM2->CCR4=0;
+			}
+			else 
+			{
+			cw2_off;	
+			TIM2->CCR4=399;
+			}
+		}
+	}
+	if(sw3_status==SW5_ON)
+	{
+		if((SWNum>>4)&0x01)//上下上限位
+		{
+			sw5.lock=1;
+			cw3_off;
+			TIM4->CCR1=399;
+		}
+		else
+		{
+			if(sw5.lock)
+			{
+			cw3_off;	
+			TIM4->CCR1=0;
+			}
+			else 
+			{
+			cw3_on;	
+			TIM4->CCR1=399;
+			}
+		}
+	}
+	if(sw3_status==SW6_ON)
+	{
+	 if((SWNum>>5)&0x01)//上下下限位
+		{
+			sw6.lock=1;
+			cw3_on;
+			TIM4->CCR1=399;
+		}
+		else
+		{
+			if(sw6.lock)
+			{
+			cw3_on;
+			TIM4->CCR1=0;
+			}
+			else 
+			{
+			cw3_off;
+			TIM4->CCR1=399;
+			}
+		}
+	}
+	if(sw1_status==SW_ALL_OFF)
+	{
+		CMPWM1=0;
+	}
+	if(sw2_status==SW_ALL_OFF)
+	{
+		CMPWM2=0;
+	}
+	if(sw3_status==SW_ALL_OFF)
+	{
+		CMPWM3=0;
+	}
+	
+}
